@@ -5,6 +5,7 @@
 package envconfig
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"net/url"
@@ -13,8 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tj/assert"
 )
 
 type HonorDecodeInStruct struct {
@@ -228,10 +229,8 @@ func TestParseErrorBool(t *testing.T) {
 	os.Setenv("ENV_CONFIG_DEBUG", "string")
 	os.Setenv("ENV_CONFIG_REQUIREDVAR", "foo")
 	err := Process("env_config", &s)
-	v, ok := err.(*ParseError)
-	if !ok {
-		t.Errorf("expected ParseError, got %v", v)
-	}
+	v := asParseError(t, err)
+
 	if v.FieldName != "Debug" {
 		t.Errorf("expected %s, got %v", "Debug", v.FieldName)
 	}
@@ -246,10 +245,8 @@ func TestParseErrorFloat32(t *testing.T) {
 	os.Setenv("ENV_CONFIG_RATE", "string")
 	os.Setenv("ENV_CONFIG_REQUIREDVAR", "foo")
 	err := Process("env_config", &s)
-	v, ok := err.(*ParseError)
-	if !ok {
-		t.Errorf("expected ParseError, got %v", v)
-	}
+	v := asParseError(t, err)
+
 	if v.FieldName != "Rate" {
 		t.Errorf("expected %s, got %v", "Rate", v.FieldName)
 	}
@@ -264,10 +261,8 @@ func TestParseErrorInt(t *testing.T) {
 	os.Setenv("ENV_CONFIG_PORT", "string")
 	os.Setenv("ENV_CONFIG_REQUIREDVAR", "foo")
 	err := Process("env_config", &s)
-	v, ok := err.(*ParseError)
-	if !ok {
-		t.Errorf("expected ParseError, got %v", v)
-	}
+	v := asParseError(t, err)
+
 	if v.FieldName != "Port" {
 		t.Errorf("expected %s, got %v", "Port", v.FieldName)
 	}
@@ -281,10 +276,8 @@ func TestParseErrorUint(t *testing.T) {
 	os.Clearenv()
 	os.Setenv("ENV_CONFIG_TTL", "-30")
 	err := Process("env_config", &s)
-	v, ok := err.(*ParseError)
-	if !ok {
-		t.Errorf("expected ParseError, got %v", v)
-	}
+	v := asParseError(t, err)
+
 	if v.FieldName != "TTL" {
 		t.Errorf("expected %s, got %v", "TTL", v.FieldName)
 	}
@@ -298,10 +291,8 @@ func TestParseErrorSplitWords(t *testing.T) {
 	os.Clearenv()
 	os.Setenv("ENV_CONFIG_MULTI_WORD_VAR_WITH_AUTO_SPLIT", "shakespeare")
 	err := Process("env_config", &s)
-	v, ok := err.(*ParseError)
-	if !ok {
-		t.Errorf("expected ParseError, got %v", v)
-	}
+	v := asParseError(t, err)
+
 	if v.FieldName != "MultiWordVarWithAutoSplit" {
 		t.Errorf("expected %s, got %v", "", v.FieldName)
 	}
@@ -712,11 +703,8 @@ func TestTextUnmarshalerError(t *testing.T) {
 	os.Setenv("ENV_CONFIG_DATETIME", "I'M NOT A DATE")
 
 	err := Process("env_config", &s)
+	v := asParseError(t, err)
 
-	v, ok := err.(*ParseError)
-	if !ok {
-		t.Errorf("expected ParseError, got %v", v)
-	}
 	if v.FieldName != "Datetime" {
 		t.Errorf("expected %s, got %v", "Datetime", v.FieldName)
 	}
@@ -741,10 +729,8 @@ func TestBinaryUnmarshalerError(t *testing.T) {
 
 	err := Process("env_config", &s)
 
-	v, ok := err.(*ParseError)
-	if !ok {
-		t.Fatalf("expected ParseError, got %T %v", err, err)
-	}
+	v := asParseError(t, err)
+
 	if v.FieldName != "UrlPointer" {
 		t.Errorf("expected %s, got %v", "UrlPointer", v.FieldName)
 	}
@@ -810,6 +796,13 @@ func TestErrorMessageForRequiredAltVar(t *testing.T) {
 	if !strings.Contains(err.Error(), " BAR ") {
 		t.Errorf("expected error message to contain BAR, got \"%v\"", err)
 	}
+}
+
+func asParseError(t *testing.T, err error) ParseError {
+	var perr *ParseError
+	ok := errors.As(err, &perr)
+	require.True(t, ok, "expected *ParseError, got %T", err)
+	return *perr
 }
 
 type bracketed string
@@ -904,4 +897,22 @@ func Test_removeEmptyStructs(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, t1{Field1: &t2{Field2: &t3{Field3: "hello"}}}, v)
 	})
+}
+
+func TestMultiProcessError(t *testing.T) {
+	type spec struct {
+		Bool    bool   `required:"true"`
+		Value1  int    `required:"true"`
+		Test    string `required:"true"`
+		Default string `default:"default_value"`
+	}
+
+	os.Clearenv()
+	os.Setenv("ENV_CONFIG_TEST", "value")
+
+	var s spec
+	err := Process("env_config", &s)
+	assert.Error(t, err)
+	assert.Equal(t, "value", s.Test)
+	assert.Equal(t, "default_value", s.Default)
 }

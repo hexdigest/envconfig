@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.uber.org/multierr"
 )
 
 // ErrInvalidSpecification indicates that a specification is of the wrong type.
@@ -183,9 +185,13 @@ func CheckDisallowed(prefix string, spec interface{}) error {
 // Process populates the specified struct based on environment variables
 func Process(prefix string, spec interface{}) error {
 	infos, err := gatherInfo(prefix, spec)
+	if err != nil {
+		return err
+	}
 
+	// collect all possible errors to show them all.
+	var errs error
 	for _, info := range infos {
-
 		// `os.Getenv` cannot differentiate between an explicitly set empty value
 		// and an unset value. `os.LookupEnv` is preferred to `syscall.Getenv`,
 		// but it is only available in go1.5 or newer. We're using Go build tags
@@ -207,21 +213,28 @@ func Process(prefix string, spec interface{}) error {
 				if info.Alt != "" {
 					key = info.Alt
 				}
-				return fmt.Errorf("required key %s missing value", key)
+				errs = multierr.Append(errs,
+					fmt.Errorf("required key %s is missing value", key))
 			}
 			continue
 		}
 
-		err = processField(value, info.Field)
-		if err != nil {
-			return &ParseError{
-				KeyName:   info.Key,
-				FieldName: info.Name,
-				TypeName:  info.Field.Type().String(),
-				Value:     value,
-				Err:       err,
-			}
+		if err := processField(value, info.Field); err != nil {
+			errs = multierr.Append(errs,
+				&ParseError{
+					KeyName:   info.Key,
+					FieldName: info.Name,
+					TypeName:  info.Field.Type().String(),
+					Value:     value,
+					Err:       err,
+				},
+			)
+			continue
 		}
+	}
+
+	if errs != nil {
+		return fmt.Errorf("collected errors: %w", errs)
 	}
 
 	return removeEmptyStructs(spec)
