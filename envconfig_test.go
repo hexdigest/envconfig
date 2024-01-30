@@ -68,12 +68,13 @@ type Specification struct {
 		Property            string `envconfig:"inner"`
 		PropertyWithDefault string `default:"fuzzybydefault"`
 	} `envconfig:"outer"`
-	AfterNested  string
-	DecodeStruct HonorDecodeInStruct `envconfig:"honor"`
-	Datetime     time.Time
-	MapField     map[string]string `default:"one:two,three:four"`
-	UrlValue     CustomURL
-	UrlPointer   *CustomURL
+	AfterNested     string
+	DecodeStruct    HonorDecodeInStruct `envconfig:"honor"`
+	Datetime        time.Time
+	MapField        map[string]string `default:"one:two,three:four"`
+	UrlValue        CustomURL
+	UrlPointer      *CustomURL
+	unexportedField time.Location
 }
 
 type Embedded struct {

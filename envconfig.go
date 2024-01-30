@@ -254,6 +254,10 @@ func removeEmptyStructs(spec interface{}) error {
 	for i := 0; i < s.NumField(); i++ {
 		f := s.Field(i)
 
+		if !f.CanInterface() {
+			continue
+		}
+
 		switch f.Kind() {
 		case reflect.Struct:
 			if err := removeEmptyStructs(f.Addr().Interface()); err != nil {
